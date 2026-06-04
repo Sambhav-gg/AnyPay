@@ -296,8 +296,8 @@ export default function App() {
               <Wifi size={10} /> Offline-First UPI
             </div>
             <h1 className="ap-headline">
-              Pay anyone,<br />
-              <span className="ap-headline--gold">no internet.</span>
+              Pay Anyone Anywhere Anytime<br />
+              <span className="ap-headline--gold">Without Internet.</span>
             </h1>
             <p className="ap-hero-sub">Scan UPI QR codes · pay via USSD · works on any network</p>
           </div>
