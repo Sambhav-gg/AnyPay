@@ -2,16 +2,19 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Scan, Upload, CreditCard, HelpCircle, Copy, Check,
   ArrowLeft, Download, Zap, Shield, Wifi,
-  ChevronRight, Wallet, X, Share, MoreVertical
+  ChevronRight, Wallet, X, Share
 } from 'lucide-react'
 import { QRScanner } from './components/QRScanner'
 import { FAQPage } from './components/FAQPage'
 import { UPIParser } from './lib/upi-parser'
 import './index.css'
-
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
 // ─── PWA install prompt is stored in a module-level ref so it's never lost
 // even if the component re-renders before useEffect fires.
-let _deferredPrompt = null
+let _deferredPrompt: BeforeInstallPromptEvent | null = null
 
 export default function App() {
   const [page, setPage] = useState('home')
@@ -38,7 +41,7 @@ export default function App() {
     // Already running as installed PWA — hide everything
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator).standalone === true
+      (navigator as Navigator & { standalone?: boolean }).standalone === true
     if (isStandalone) {
       setInstallState('installed')
       return
