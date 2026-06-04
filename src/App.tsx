@@ -8,10 +8,20 @@ import { QRScanner } from './components/QRScanner'
 import { FAQPage } from './components/FAQPage'
 import { UPIParser } from './lib/upi-parser'
 import './index.css'
+
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
+
+interface UPIData {
+  upiId: string
+  payeeName?: string
+  amount?: string
+  transactionNote?: string
+  url?: string
+}
+
 // ─── PWA install prompt is stored in a module-level ref so it's never lost
 // even if the component re-renders before useEffect fires.
 let _deferredPrompt: BeforeInstallPromptEvent | null = null
@@ -20,22 +30,17 @@ export default function App() {
   const [page, setPage] = useState('home')
   const [isQROpen, setIsQROpen] = useState(false)
   const [isFAQOpen, setIsFAQOpen] = useState(false)
-  const [upiData, setUpiData] = useState(null)
+  const [upiData, setUpiData] = useState<UPIData | null>(null)
   const [isCopied, setIsCopied] = useState(false)
   const [showIOSModal, setShowIOSModal] = useState(false)
 
   // installState: 'hidden' | 'android' | 'ios' | 'desktop' | 'installed'
-  // 'android'  — beforeinstallprompt available, we can trigger it directly
-  // 'desktop'  — desktop browser (Chrome/Edge/Firefox), guide user to address bar
-  // 'ios'      — iOS Safari, show Add to Home Screen instructions
-  // 'installed'— already running as standalone PWA
-  // 'hidden'   — shouldn't show (e.g. user declined)
   const [installState, setInstallState] = useState('hidden')
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [showDesktopModal, setShowDesktopModal] = useState(false)
 
-  const fileInputRef = useRef(null)
-  const promptRef = useRef(null) // safe ref for the deferred prompt
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const promptRef = useRef<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
     // Already running as installed PWA — hide everything
@@ -62,13 +67,11 @@ export default function App() {
     // Desktop detection — show a "look at your address bar" guide
     const isDesktop = window.innerWidth >= 768 && !/android|mobile/i.test(navigator.userAgent)
 
-    // Android/Chrome: capture the prompt ASAP.
-    // The event may have already fired before this effect ran —
-    // we stash it in the module-level variable first.
-    const handler = (e) => {
+    const handler = (e: Event) => {
       e.preventDefault()
-      _deferredPrompt = e
-      promptRef.current = e
+      const promptEvent = e as BeforeInstallPromptEvent
+      _deferredPrompt = promptEvent
+      promptRef.current = promptEvent
       setInstallState('android')
     }
 
@@ -77,9 +80,6 @@ export default function App() {
       promptRef.current = _deferredPrompt
       setInstallState('android')
     } else if (isDesktop) {
-      // On desktop, beforeinstallprompt may still fire (Chrome/Edge).
-      // Show the button anyway so user knows it's installable;
-      // clicking it will either trigger the prompt or show address bar guide.
       setInstallState('desktop')
     }
 
@@ -100,7 +100,7 @@ export default function App() {
     }
   }, [])
 
-  const copyToClipboard = async (text) => {
+  const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
       setIsCopied(true)
@@ -108,18 +108,18 @@ export default function App() {
     } catch { }
   }
 
-  const handleSharedText = (text) => {
-    const data = UPIParser.parseUPI(text)
+  const handleSharedText = (text: string) => {
+    const data = UPIParser.parseUPI(text) as UPIData | null
     if (data) { setUpiData(data); copyToClipboard(data.upiId); setPage('result') }
   }
 
-  const handleQRScan = (result) => {
-    const data = UPIParser.parseUPI(result)
+  const handleQRScan = (result: string) => {
+    const data = UPIParser.parseUPI(result) as UPIData | null
     if (data) {
       setUpiData(data); copyToClipboard(data.upiId)
       setIsQROpen(false); setPage('result')
     } else {
-      const ids = UPIParser.extractAllUPIIds(result)
+      const ids = UPIParser.extractAllUPIIds(result) as string[]
       if (ids.length > 0) {
         setUpiData({ upiId: ids[0], url: result })
         copyToClipboard(ids[0])
@@ -128,7 +128,7 @@ export default function App() {
     }
   }
 
-  const handleFileUpload = async (e) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     try {
@@ -283,7 +283,6 @@ export default function App() {
               <div className="ap-logo"><Zap size={15} strokeWidth={2.5} /></div>
               <span className="ap-wordmark">AnyPay</span>
             </div>
-            {/* Header install button — only when installable, shows label on Android */}
             {showInstallUI && (
               <button className="ap-header-install-btn" onClick={handleInstall}>
                 <Download size={14} />
@@ -345,7 +344,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* ── Install strip — only when installable and not dismissed ── */}
           {showInstallUI && (
             <div className="ap-install-strip animate-rise">
               <button className="ap-install-strip-body" onClick={handleInstall}>
@@ -578,7 +576,6 @@ const sharedStyles = `
   }
   .ap-icon-btn:hover { background: var(--ap-surface2); border-color: var(--ap-border2); }
 
-  /* Header install button — pill with icon + label */
   .ap-header-install-btn {
     display: flex; align-items: center; gap: 6px;
     height: 34px; padding: 0 12px;
@@ -691,7 +688,6 @@ const sharedStyles = `
   .ap-quick-label { font-size: 13px; font-weight: 600; color: var(--ap-text); margin-bottom: 3px; }
   .ap-quick-code { font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--ap-text3); }
 
-  /* ── Install strip — redesigned with dismiss button ── */
   .ap-install-strip {
     display: flex; align-items: stretch; gap: 0;
     background: linear-gradient(135deg, rgba(212,168,83,0.08), rgba(212,168,83,0.04));
@@ -751,7 +747,6 @@ const sharedStyles = `
 
   .ap-row-2 { display: flex; gap: 10px; margin-bottom: 10px; }
 
-  /* ── Detail rows ── */
   .ap-detail-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--ap-border); }
   .ap-detail-content { flex: 1; min-width: 0; }
   .ap-detail-key { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ap-text3); margin-bottom: 4px; font-family: 'SF Mono', 'Fira Code', monospace; }
@@ -762,7 +757,6 @@ const sharedStyles = `
   .ap-copy-btn:hover { border-color: var(--ap-border2); }
   .ap-copy-btn--copied { background: rgba(62,207,122,0.1); border-color: rgba(62,207,122,0.3); color: var(--ap-green); }
 
-  /* ── Success hero ── */
   .ap-success-hero { text-align: center; padding: 32px 0 8px; }
   .ap-success-ring {
     width: 80px; height: 80px; border-radius: 50%;
@@ -779,7 +773,6 @@ const sharedStyles = `
   .ap-success-sub { font-size: 14px; color: var(--ap-text2); }
   .ap-ussd-hint { font-size: 12px; color: var(--ap-text3); text-align: center; margin-top: 12px; line-height: 1.6; }
 
-  /* ── iOS modal ── */
   .ap-modal-backdrop {
     position: fixed; inset: 0; z-index: 60;
     background: rgba(0,0,0,0.7);
@@ -821,7 +814,6 @@ const sharedStyles = `
     letter-spacing: 0.01em;
   }
 
-  /* ── Desktop modal variant — centered, not bottom sheet ── */
   .ap-modal--center {
     border-radius: 24px;
     margin: auto;
@@ -834,7 +826,6 @@ const sharedStyles = `
   }
   .ap-modal-browser-note strong { color: var(--ap-text2); font-weight: 600; }
 
-  /* Animations */
   @keyframes rise {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
